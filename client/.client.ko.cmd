@@ -1,0 +1,1 @@
+cmd_/home/reagan9184/linux_term/client/client.ko := ld -r -m elf_x86_64 -z noexecstack --build-id=sha1  -T scripts/module.lds -o /home/reagan9184/linux_term/client/client.ko /home/reagan9184/linux_term/client/client.o /home/reagan9184/linux_term/client/client.mod.o;  true

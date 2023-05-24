@@ -1,0 +1,1 @@
+cmd_/home/reagan9184/linux_term/chat2/chat_server_module.ko := ld -r -m elf_x86_64 -z noexecstack --build-id=sha1  -T scripts/module.lds -o /home/reagan9184/linux_term/chat2/chat_server_module.ko /home/reagan9184/linux_term/chat2/chat_server_module.o /home/reagan9184/linux_term/chat2/chat_server_module.mod.o;  true

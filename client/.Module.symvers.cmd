@@ -1,0 +1,1 @@
+cmd_/home/reagan9184/linux_term/client/Module.symvers :=  sed 's/ko$$/o/'  /home/reagan9184/linux_term/client/modules.order | scripts/mod/modpost -m -a -E   -o /home/reagan9184/linux_term/client/Module.symvers -e -i Module.symvers -T - 

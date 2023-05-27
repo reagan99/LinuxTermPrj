@@ -50,10 +50,13 @@ __used __section("__versions") = {
 	{ 0x4228868d, "filp_close" },
 	{ 0x6c1f55c0, "kernel_read" },
 	{ 0x37a0cba, "kfree" },
+	{ 0xa916b694, "strnlen" },
+	{ 0xcbd4898c, "fortify_panic" },
+	{ 0x54ef0a4f, "param_ops_int" },
 	{ 0xbf8e4f2e, "module_layout" },
 };
 
 MODULE_INFO(depends, "");
 
 
-MODULE_INFO(srcversion, "01529533CF1583077A06EFB");
+MODULE_INFO(srcversion, "E136EBD4C227862C3EC6616");

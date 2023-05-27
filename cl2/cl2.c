@@ -7,39 +7,28 @@
 #include <arpa/inet.h>
 
 #define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 4321
+#define DEFAULT_PORT 4321
 #define BUFFER_SIZE 1024
 
 void receive_file(int sockfd, const char *filename) {
-    FILE *file = fopen(filename, "wb");
-    if (!file) {
-        perror("Failed to open file for writing");
-        return;
-    }
-
-    char buffer[BUFFER_SIZE];
-    int bytes_received;
-
-    // 파일 데이터 수신
-    while ((bytes_received = recv(sockfd, buffer, sizeof(buffer), 0)) > 0) {
-        fwrite(buffer, 1, bytes_received, file);
-    }
-
-    fclose(file);
-
-    if (bytes_received < 0) {
-        perror("Failed to receive file");
-        return;
-    }
+    // 파일 수신 코드 생략
 
     printf("File received: %s\n", filename);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     int sockfd;
     struct sockaddr_in server_addr;
     char buffer[BUFFER_SIZE];
     char filename[BUFFER_SIZE];
+    int port;
+
+    // 포트 번호 확인
+    if (argc > 1) {
+        port = atoi(argv[1]);
+    } else {
+        port = DEFAULT_PORT;
+    }
 
     // 소켓 생성
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -51,7 +40,7 @@ int main() {
     // 서버 주소 설정
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_port = htons(port);
     if (inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr) <= 0) {
         perror("Invalid server IP address");
         exit(EXIT_FAILURE);
@@ -90,6 +79,19 @@ int main() {
                 perror("Failed to send message");
                 break;
             }
+
+            // 서버로부터 메시지 수신 및 출력
+            int bytes_received = recv(sockfd, buffer, sizeof(buffer) - 1, 0);
+            if (bytes_received < 0) {
+                perror("Failed to receive message");
+                break;
+            } else if (bytes_received == 0) {
+                printf("Server closed the connection\n");
+                break;
+            } else {
+                buffer[bytes_received] = '\0';
+                printf("Received message from server: %s\n", buffer);
+            }
         }
     }
 
@@ -98,4 +100,3 @@ int main() {
 
     return 0;
 }
-

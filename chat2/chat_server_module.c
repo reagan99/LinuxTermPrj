@@ -12,12 +12,17 @@
 #include <linux/slab.h>
 
 #define MAX_FILENAME_LEN 12
+#define MAX_MESSAGE_LEN 100
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Your Name");
 MODULE_DESCRIPTION("Chat Module");
 
+static int port = 4321; // 기본 포트 번호
+module_param(port, int, S_IRUGO);
+
 static struct socket *server_socket = NULL;
-static struct socket *client_socket = NULL; // 추가: 클라이언트 소켓
+static struct socket *client_socket = NULL;
 
 static int create_server_socket(int port)
 {
@@ -62,13 +67,13 @@ static int receive_message(struct socket *socket, char *buffer, size_t buffer_si
     struct kvec iov;
     struct iov_iter iter;
     int bytes_received;
-    
+
     iov.iov_base = buffer;
     iov.iov_len = buffer_size;
 
     msg.msg_control = NULL;
     msg.msg_controllen = 0;
-    msg.msg_flags = 0;  // 모든 데이터를 한 번에 수신
+    msg.msg_flags = 0;
     msg.msg_name = NULL;
     msg.msg_namelen = 0;
     iov_iter_kvec(&iter, READ, &iov, 1, buffer_size);
@@ -78,13 +83,10 @@ static int receive_message(struct socket *socket, char *buffer, size_t buffer_si
 
     if (bytes_received < 0) {
         pr_err("Failed to receive message(server): %d\n", bytes_received);
-        // 오류 처리를 수행하는 코드 추가
-        // 예를 들어, 연결을 종료할 수 있습니다.
         return -1;
     }
 
-    // 수신 메시지를 로그에 출력
-    pr_info("Received message: %.*s\n", bytes_received, buffer);
+    pr_info("Received message(server): %.*s\n", bytes_received, buffer);
 
     return bytes_received;
 }
@@ -106,10 +108,12 @@ static int send_message(struct socket *socket, const char *message, size_t messa
     iov_iter_kvec(&msg.msg_iter, WRITE, &iov, 1, message_len);
 
     bytes_sent = kernel_sendmsg(socket, &msg, &iov, 1, message_len);
+
     return bytes_sent;
 }
 
-static int send_file(struct socket *socket, const char *filename) {
+static int send_file(struct socket *socket, const char *filename)
+{
     struct file *file;
     loff_t pos = 0;
     char *buffer;
@@ -143,16 +147,14 @@ static int send_file(struct socket *socket, const char *filename) {
     return bytes_sent;
 }
 
-
 static int __init tcp_socket_init(void)
 {
     int err;
-    int port = 4321;
-    char buffer[100];
+    char buffer[MAX_MESSAGE_LEN];
     bool is_file_request = false;
     char filename[MAX_FILENAME_LEN] = "my_file.txt";
     int bytes_sent;
-    
+
     err = create_server_socket(port);
     if (err < 0) {
         pr_err("Failed to create server socket: %d\n", err);
@@ -160,7 +162,6 @@ static int __init tcp_socket_init(void)
     }
 
     while (1) {
-        // 클라이언트의 연결 수락
         err = kernel_accept(server_socket, &client_socket, 0);
         if (err < 0) {
             pr_err("Failed to accept client connection: %d\n", err);
@@ -168,6 +169,7 @@ static int __init tcp_socket_init(void)
         }
 
         pr_info("Accepted client connection\n");
+        is_file_request = false;
 
         while (1) {
             int bytes_received = receive_message(client_socket, buffer, sizeof(buffer));
@@ -177,10 +179,9 @@ static int __init tcp_socket_init(void)
                 break;
             }
 
-            pr_info("Received message: %.*s\n", bytes_received, buffer);
+            //pr_info("(Received message(server)): %.*s\n", bytes_received, buffer);
 
             if (strncmp(buffer, "FILE:", 5) == 0) {
-                // 파일 전송 요청 처리
                 memset(filename, 0, MAX_FILENAME_LEN);
                 strncpy(filename, buffer + 5, MAX_FILENAME_LEN - 1);
 
@@ -194,10 +195,10 @@ static int __init tcp_socket_init(void)
                 pr_info("File sent: %s, Bytes sent: %d\n", filename, bytes_sent);
                 is_file_request = true;
             } else {
-                // 일반 메시지 전송
                 if (is_file_request) {
-                    // 파일 전송 후 첫 메시지인 경우에만 "Hello, client!" 메시지를 전송
-                    char message[30] = "Hello, client!";
+                    char message[MAX_MESSAGE_LEN];
+                    strncpy(message, "Hello, client!", MAX_MESSAGE_LEN);
+
                     bytes_sent = send_message(client_socket, message, strlen(message));
 
                     if (bytes_sent < 0) {
@@ -205,11 +206,25 @@ static int __init tcp_socket_init(void)
                         break;
                     }
                     is_file_request = false;
+                } else {
+                    // 클라이언트로 메시지 전송
+                    size_t message_len = bytes_received + 1;  // 원본 메시지 길이 + 1 (느낌표 추가)
+                    char modified_message[MAX_MESSAGE_LEN + 1];  // 수정된 메시지 버퍼
+
+                    strncpy(modified_message, buffer, bytes_received);  // 원본 메시지 복사
+                    modified_message[bytes_received] = '!';  // 느낌표 추가
+                    modified_message[bytes_received + 1] = '\0';  // 문자열 종료
+
+                    bytes_sent = send_message(client_socket, modified_message, message_len);
+
+                    if (bytes_sent < 0) {
+                        pr_err("Failed to send message: %d\n", bytes_sent);
+                        break;
+                    }
                 }
             }
         }
 
-        // 클라이언트 소켓 해제
         if (client_socket) {
             sock_release(client_socket);
             client_socket = NULL;
@@ -225,6 +240,7 @@ static void __exit tcp_socket_exit(void)
         sock_release(server_socket);
         server_socket = NULL;
     }
+
     if (client_socket) {
         sock_release(client_socket);
         client_socket = NULL;

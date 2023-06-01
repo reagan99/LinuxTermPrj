@@ -13,10 +13,11 @@
 
 #define MAX_FILENAME_LEN 12
 #define MAX_MESSAGE_LEN 100
+#define MAX_IP_LEN 16
 static int port = 4320; 
 
 static struct socket *server_socket = NULL;
-static struct socket *client_socket = NULL; // 추가: 클라이언트 소켓
+static struct socket *client_socket = NULL; 
 
 void tcp_socket_exit(void)
 {
@@ -81,7 +82,7 @@ static int receive_message(struct socket *socket, char *buffer, size_t buffer_si
 
     msg.msg_control = NULL;
     msg.msg_controllen = 0;
-    msg.msg_flags = 0;  // 모든 데이터를 한 번에 수신
+    msg.msg_flags = 0; 
     msg.msg_name = NULL;
     msg.msg_namelen = 0;
     iov_iter_kvec(&iter, READ, &iov, 1, buffer_size);
@@ -91,8 +92,7 @@ static int receive_message(struct socket *socket, char *buffer, size_t buffer_si
 
     if (bytes_received < 0) {
         pr_err("Failed to receive message(server): %d\n", bytes_received);
-        // 오류 처리를 수행하는 코드 추가
-        // 예를 들어, 연결을 종료할 수 있습니다.
+     
         return -1;
     }
 
@@ -157,20 +157,32 @@ static int send_file(struct socket *socket, const char *filename) {
 }
 
 
-SYSCALL_DEFINE1(server, const char __user *, message)
+SYSCALL_DEFINE2(server, const char __user *, message, const char __user *, client_ip_arg)
 {
     int err;
     char buffer[100];
     bool is_file_request = false;
     char filename[MAX_FILENAME_LEN] = "my_file.txt";
     int bytes_sent;
+    struct sockaddr_in addr;
+    int addrlen;
+    char client_ip[MAX_IP_LEN];
+    char kernel_client_ip[MAX_IP_LEN];
 
+    addrlen = sizeof(addr);
     err = create_server_socket(port);
     if (err < 0) {
         pr_err("Failed to create server socket: %d\n", err);
         return err;
     }
-    // ... (이전 코드와 동일)
+
+    // Copy client_ip_arg to kernel buffer
+    
+    if (copy_from_user(kernel_client_ip, client_ip_arg, MAX_IP_LEN) != 0) {
+        pr_err("Failed to copy client IP address\n");
+        tcp_socket_exit();
+        return -EFAULT;
+    }
 
     while (1) {
         // 클라이언트의 연결 수락
@@ -179,8 +191,24 @@ SYSCALL_DEFINE1(server, const char __user *, message)
             pr_err("Failed to accept client connection: %d\n", err);
             break;
         }
-
         pr_info("Accepted client connection\n");
+
+        // 클라이언트의 IP 주소 확인
+        if (kernel_getpeername(client_socket, (struct sockaddr *)&addr) < 0) {
+            pr_err("Failed to get client IP address\n");
+            sock_release(client_socket);
+            continue; // 다음 클라이언트의 연결 시도를 기다립니다.
+        }
+
+        // 클라이언트의 IP 주소를 문자열로 변환
+        snprintf(client_ip, MAX_IP_LEN, "%pI4", &addr.sin_addr.s_addr);
+
+        // 클라이언트의 IP 주소가 client_ip_arg와 일치하는지 확인
+        if (strcmp(client_ip, kernel_client_ip) != 0) {
+            pr_err("Access denied for client IP: %s\n", client_ip);
+            sock_release(client_socket);
+            continue; // 다음 클라이언트의 연결 시도를 기다립니다.
+        }
 
         while (1) {
             int bytes_received = receive_message(client_socket, buffer, sizeof(buffer));
@@ -190,7 +218,6 @@ SYSCALL_DEFINE1(server, const char __user *, message)
                 break;
             }
 
-            
             if (copy_from_user(kernel_message, message, MAX_MESSAGE_LEN - 1) != 0) {
                 pr_err("Failed to copy user message\n");
                 break;
@@ -199,7 +226,7 @@ SYSCALL_DEFINE1(server, const char __user *, message)
 
             pr_info("Received message: %s\n", kernel_message);
             bytes_sent = send_message(client_socket, kernel_message, strlen(kernel_message));
-            
+
             if (strncmp(buffer, "FILE:", 5) == 0) {
                 memset(filename, 0, MAX_FILENAME_LEN);
                 strncpy(filename, buffer + 5, MAX_FILENAME_LEN - 1);
@@ -226,9 +253,6 @@ SYSCALL_DEFINE1(server, const char __user *, message)
                     }
                     is_file_request = false;
                 } else {
-                    // 메시지 echo
-                    //bytes_sent = send_message(client_socket, buffer, bytes_received);
-                    //bytes_sent = send_message(client_socket, message, 5);
 
                     if (bytes_sent < 0) {
                         pr_err("Failed to send message: %d\n", bytes_sent);
@@ -244,6 +268,7 @@ SYSCALL_DEFINE1(server, const char __user *, message)
             client_socket = NULL;
         }
     }
+
     tcp_socket_exit();
 
     return 0;

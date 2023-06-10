@@ -72,7 +72,7 @@ tcp\_socket\_exit  함수는  서버  소켓과  클라이언트  소켓을  해
 함수는  다음과  같이  동작한다. 
 
 1. server\_socket이  유효한  경우에는  sock\_release  함수를  호출하여  서버  소켓을  해 제한다. 
-1. server\_socket을  NULL로  설정한다.  마찬가지로  client\_socket이  유효한  경우에도 동일한  과정을  수행한다. . 
+1. server\_socket을  NULL로  설정한다.  마찬가지로  client\_socket이  유효한  경우에도 동일한  과정을  수행한다. 
 
 ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.007.png)
 
@@ -286,165 +286,132 @@ const char \_\_user \*message:  사용자로부터  전달받은  메시지를  
 
 클라이언트  코드 
 
-#include <unistd.h> ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.028.png)#include <stdio.h> #include <stdlib.h> #include <string.h> #include <sys/socket.h> #include <netinet/in.h> #include <arpa/inet.h> 
-
-#define SERVER\_IP "127.0.0.1" #define SERVER\_PORT 4320 #define BUFFER\_SIZE 1024 
-
-void receive\_file(int sockfd, const char \*filename) {     FILE \*file = fopen(filename, "wb"); 
-
-`    `if (!file) { 
-
-`        `perror("Failed to open file for writing"); ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.029.png)
-
-`        `return; 
-
-`    `} 
-
-char buffer[BUFFER\_SIZE]; int bytes\_received; 
-
-`    `// 파일 데이터  수신 
-
-`    `while ((bytes\_received = recv(sockfd, buffer, sizeof(buffer), 0)) > 0) {         ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.030.png)fwrite(buffer, 1, bytes\_received, file); 
-
-`    `} 
-
-fclose(file); 
-
-`    `if (bytes\_received < 0) { 
-
-`        `perror("Failed to receive file");         return; 
-
-`    `} 
-
-`    `printf("File received: %s\n", filename); 
-
-} 
-
-int receive\_message(int sockfd, char \*buffer, size\_t buffer\_size) {     int bytes\_received = recv(sockfd, buffer, buffer\_size, 0); ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.031.png)
-
-`    `if (bytes\_received < 0) { 
-
-`        `perror("Failed to receive message"); 
-
-`        `return -1; 
-
-`    `} else if (bytes\_received == 0) { 
-
-`        `printf("Connection closed by server\n"); 
-
-`        `return -1; 
-
-`    `} else { ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.032.png)
-
-`        `printf("Received message: %.\*s\n", bytes\_received, buffer);         ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.033.png)return bytes\_received; 
-
-`    `} 
-
-} 
-
-int send\_message(int sockfd, const char \*message) { 
-
-`    `int bytes\_sent = send(sockfd, message, strlen(message), 0);     ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.034.png)if (bytes\_sent < 0) { 
-
-`        `perror("Failed to send message"); 
-
-`        `return -1; 
-
-`    `} 
-
-`    `return bytes\_sent; 
-
-} 
-
-int main() { 
-
-`    `int sockfd; 
-
-`    `struct sockaddr\_in server\_addr;     char buffer[BUFFER\_SIZE]; 
-
-`    `char filename[BUFFER\_SIZE]; 
-
-`    `// 소켓 생성 
-
-`    `sockfd = socket(AF\_INET, SOCK\_STREAM, 0);     if (sockfd < 0) { 
-
-`        `perror("Failed to create socket"); 
-
-`        `exit(EXIT\_FAILURE); 
-
-`    `} 
-
-`    `// 서버 주소  설정 
-
-`    `memset(&server\_addr, 0, sizeof(server\_addr)); 
-
-`    `server\_addr.sin\_family = AF\_INET; 
-
-`    `server\_addr.sin\_port = htons(SERVER\_PORT); 
-
-`    `if (inet\_pton(AF\_INET, SERVER\_IP, &server\_addr.sin\_addr) <= 0) {         ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.035.png)perror("Invalid server IP address"); 
-
-`        `exit(EXIT\_FAILURE); 
-
-`    `} 
-
-`    `// 서버에  연결 
-
-`    `if (connect(sockfd, (struct sockaddr \*)&server\_addr, sizeof(server\_addr)) ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.036.png)
-
-- 0) { 
-
-`        `perror("Failed to connect to server"); 
-
-`        `exit(EXIT\_FAILURE); 
-
-`    `} 
-
-`    `// 메시지  전송  및 파일  수신     while (1) { 
-
-`        `// 메시지  입력 
-
-`        `printf("Enter your message (or file name to receive, 'exit' to quit):![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.037.png)\n"); 
-
-`        `fgets(buffer, BUFFER\_SIZE, stdin); 
-
-`        `buffer[strcspn(buffer, "\n")] = '\0';  // 개행 문자  제거 
-
-`        `// "exit" 입력 시 종료 ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.038.png)
-
-`        `if (strcmp(buffer, "exit") == 0) {             break; 
-
-`        `} 
-
-`        `// 파일  수신  요청인  경우 
-
-`        `if (strncmp(buffer, "FILE:", 5) == 0) { 
-
-`            `memset(filename, 0, sizeof(filename)); 
-
-`            `strncpy(filename, buffer + 5, sizeof(filename) - 1); ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.039.png)
-
-`            `if (send\_message(sockfd, buffer) < 0) {                 ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.040.png)break; 
-
-`            `} 
-
-`            `receive\_file(sockfd, filename); 
-
-`        `} else {  // 일반  메시지  전송 
-
-`            `if (send\_message(sockfd, buffer) < 0) {                 ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.041.png)break; 
-
-`            `} 
-
-`            `// 메시지 수신 
-
-`            `receive\_message(sockfd, buffer, sizeof(buffer));         } ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.042.png)
-
-`    `} 
-
-// 소켓 닫기 close(sockfd); 
-
-`    `return 0; } 
+```
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#define SERVER_IP "127.0.0.1"
+#define SERVER_PORT 4320
+#define BUFFER_SIZE 1024
+
+void receive_file(int sockfd, const char *filename) {
+    FILE *file = fopen(filename, "wb");
+    if (!file) {
+        perror("Failed to open file for writing");
+        return;
+    }
+
+    char buffer[BUFFER_SIZE];
+    int bytes_received;
+
+    // 파일 데이터 수신
+    while ((bytes_received = recv(sockfd, buffer, sizeof(buffer), 0)) > 0) {
+        fwrite(buffer, 1, bytes_received, file);
+    }
+
+    fclose(file);
+
+    if (bytes_received < 0) {
+        perror("Failed to receive file");
+        return;
+    }
+
+    printf("File received: %s\n", filename);
+}
+int receive_message(int sockfd, char *buffer, size_t buffer_size) {
+    int bytes_received = recv(sockfd, buffer, buffer_size, 0);
+    if (bytes_received < 0) {
+        perror("Failed to receive message");
+        return -1;
+    } else if (bytes_received == 0) {
+        printf("Connection closed by server\n");
+        return -1;
+    } else {
+        printf("Received message: %.*s\n", bytes_received, buffer);
+        return bytes_received;
+    }
+}
+
+int send_message(int sockfd, const char *message) {
+    int bytes_sent = send(sockfd, message, strlen(message), 0);
+    if (bytes_sent < 0) {
+        perror("Failed to send message");
+        return -1;
+    }
+    return bytes_sent;
+}
+
+int main() {
+    int sockfd;
+    struct sockaddr_in server_addr;
+    char buffer[BUFFER_SIZE];
+    char filename[BUFFER_SIZE];
+
+    // 소켓 생성
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("Failed to create socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // 서버 주소 설정
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(SERVER_PORT);
+    if (inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr) <= 0) {
+        perror("Invalid server IP address");
+        exit(EXIT_FAILURE);
+    }
+
+    // 서버에 연결
+    if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Failed to connect to server");
+        exit(EXIT_FAILURE);
+    }
+
+    // 메시지 전송 및 파일 수신
+    while (1) {
+        // 메시지 입력
+        printf("Enter your message (or file name to receive, 'exit' to quit):\n");
+        fgets(buffer, BUFFER_SIZE, stdin);
+        buffer[strcspn(buffer, "\n")] = '\0';  // 개행 문자 제거
+
+        // "exit" 입력 시 종료
+        if (strcmp(buffer, "exit") == 0) {
+            break;
+        }
+
+        // 파일 수신 요청인 경우
+        if (strncmp(buffer, "FILE:", 5) == 0) {
+            memset(filename, 0, sizeof(filename));
+            strncpy(filename, buffer + 5, sizeof(filename) - 1);
+
+            if (send_message(sockfd, buffer) < 0) {
+                break;
+            }
+
+            receive_file(sockfd, filename);
+        } else {  // 일반 메시지 전송
+            if (send_message(sockfd, buffer) < 0) {
+                break;
+            }
+
+            // 메시지 수신
+            receive_message(sockfd, buffer, sizeof(buffer));
+        }
+    }
+
+    // 소켓 닫기
+    close(sockfd);
+
+    return 0;
+}
+```
 
 일반적인  소켓  클라이언트  처럼  작성되었다. 
 

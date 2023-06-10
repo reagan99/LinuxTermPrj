@@ -136,189 +136,125 @@ send\_file  함수는  주어진  파일을  소켓을  통해  클라이언트�
 2. 전송이  성공하면  전송된  바이트  수를  반환하고,  실패하면  오류  코드를  반환한다. 
 2. 함수가  종료되면  할당된  버퍼를  해제하고  파일을  닫는다. 
 
-SYSCALL\_DEFINE2(server, const char \_\_user \*, message, const char \_\_user ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.010.png)\*, client\_ip\_arg) 
-
-{ 
-
-`    `int err; 
-
-`    `char buffer[100]; 
-
-`    `bool is\_file\_request = false; 
-
-`    `char filename[MAX\_FILENAME\_LEN] = "my\_file.txt"; ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.011.png)
-
-`    `int bytes\_sent; 
-
-`    `struct sockaddr\_in addr; 
-
-`    `int addrlen; 
-
-`    `char client\_ip[MAX\_IP\_LEN]; 
-
-`    `char kernel\_client\_ip[MAX\_IP\_LEN]; 
-
-`    `addrlen = sizeof(addr); 
-
-`    `err = create\_server\_socket(port); 
-
-`    `if (err < 0) { 
-
-`        `pr\_err("Failed to create server socket: %d\n", err);         ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.010.png)return err; 
-
-`    `} 
-
-// Copy client\_ip\_arg to kernel buffer 
-
-`    `if (copy\_from\_user(kernel\_client\_ip, client\_ip\_arg, MAX\_IP\_LEN) != ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.012.png)0) {         pr\_err("Failed to copy client IP address\n"); ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.013.png)
-
-`        `tcp\_socket\_exit(); 
-
-`        `return -EFAULT; 
-
-`    `} 
-
-`    `while (1) { 
-
-`        `// 클라이언트의  연결  수락 
-
-`        `err = kernel\_accept(server\_socket, &client\_socket, 0); ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.014.png)
-
-`        `if (err < 0) { 
-
-`            `pr\_err("Failed to accept client connection: %d\n", err);             ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.015.png)break; 
-
-} ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.016.png)
-
-pr\_info("Accepted client connection\n"); 
-
-`        `// 클라이언트의  IP 주소 확인 
-
-`        `if (kernel\_getpeername(client\_socket, (struct sockaddr \*)&addr) ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.017.png)
-
-- 0) { 
-
-`            `pr\_err("Failed to get client IP address\n"); ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.018.png)
-
-`            `sock\_release(client\_socket); 
-
-`            `continue; // 다음 클라이언트의  연결  시도를  기다립니다.![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.019.png)
-
-`        `} 
-
-`        `// 클라이언트의  IP 주소를  문자열로  변환 
-
-`        `snprintf(client\_ip, MAX\_IP\_LEN, "%pI4", &addr.sin\_addr.s\_addr); ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.017.png)
-
-`        `// 클라이언트의  IP 주소가  client\_ip\_arg 와 일치하는지  확인 
-
-`        `if (strcmp(client\_ip, kernel\_client\_ip) != 0) { 
-
-`            `pr\_err("Access denied for client IP: %s\n", client\_ip);             ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.017.png)sock\_release(client\_socket); 
-
-`            `continue; // 다음 클라이언트의  연결  시도를  기다립니다.![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.020.png)
-
-`        `} 
-
-`        `while (1) { 
-
-`            `int bytes\_received = receive\_message(client\_socket, buffer, ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.018.png)sizeof(buffer)); 
-
-`            `char kernel\_message[MAX\_MESSAGE\_LEN]; ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.017.png)
-
-`            `if (bytes\_received < 0) { 
-
-`                `pr\_err("Failed to receive message(server\_init): %d\n", ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.021.png)bytes\_received); 
-
-`                `break; 
-
-`            `} 
-
-`            `if (copy\_from\_user(kernel\_message, message, MAX\_MESSAGE\_LEN ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.022.png)- 1) != 0) {                 pr\_err("Failed to copy user message\n"); ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.023.png)
-
-`                `break; 
-
-`            `} 
-
-`            `kernel\_message[MAX\_MESSAGE\_LEN - 1] = '\0';  // 문자열  종료를 ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.024.png)위해  널 문자 추가 
-
-`            `pr\_info("Received message: %s\n", kernel\_message); 
-
-`            `bytes\_sent = send\_message(client\_socket, kernel\_message, ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.024.png)strlen(kernel\_message)); 
-
-`            `if (strncmp(buffer, "FILE:", 5) == 0) { 
-
-`                `memset(filename, 0, MAX\_FILENAME\_LEN); 
-
-`                `strncpy(filename, buffer + 5, MAX\_FILENAME\_LEN - 1); 
-
-bytes\_sent = send\_file(client\_socket, filename); ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.023.png)
-
-![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.022.png)
-
-`                `if (bytes\_sent < 0) { 
-
-`                    `pr\_err("Failed to send file: %.\*s\n", ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.021.png)MAX\_FILENAME\_LEN, filename); 
-
-`                    `break; 
-
-`                `} 
-
-`                `pr\_info("File sent: %s, Bytes sent: %d\n", filename, ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.022.png)bytes\_sent); 
-
-`                `is\_file\_request = true; ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.023.png)
-
-`            `} else { 
-
-`                `// 일반 메시지  전송 
-
-`                `if (is\_file\_request) { 
-
-`                    `// 파일  전송  후 첫 메시지인  경우에만 "Hello, client!" ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.025.png)메시지를  전송 
-
-`                    `char greeting\_message[30] = "Hello, client!"; 
-
-`                    `bytes\_sent = send\_message(client\_socket, ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.024.png)greeting\_message, strlen(greeting\_message)); 
-
-`                    `if (bytes\_sent < 0) { 
-
-`                        `pr\_err("Failed to send greeting message: %d\n", ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.019.png)bytes\_sent); 
-
-`                        `break; 
-
-`                    `} 
-
-`                    `is\_file\_request = false; ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.024.png)
-
-`                `} else { 
-
-`                    `if (bytes\_sent < 0) { 
-
-`                        `pr\_err("Failed to send message: %d\n", ![](Aspose.Words.6ac79528-ce12-4b84-8763-0d00aeb97359.026.png)bytes\_sent); 
-
-`                        `break; 
-
-`                    `} 
-
-`                `} 
-
-`            `} 
-
-`        `} 
-
-`        `// 클라이언트  소켓  해제 
-
-`        `if (client\_socket) { 
-
-`            `sock\_release(client\_socket);             client\_socket = NULL; 
-
-`        `} 
-
-`    `} 
-
-tcp\_socket\_exit(); 
-
-`    `return 0; } 
+```
+SYSCALL_DEFINE2(server, const char __user *, message, const char __user *, client_ip_arg)
+{
+    int err;
+    char buffer[100];
+    bool is_file_request = false;
+    char filename[MAX_FILENAME_LEN] = "my_file.txt";
+    int bytes_sent;
+    struct sockaddr_in addr;
+    int addrlen;
+    char client_ip[MAX_IP_LEN];
+    char kernel_client_ip[MAX_IP_LEN];
+
+    addrlen = sizeof(addr);
+    err = create_server_socket(port);
+    if (err < 0) {
+        pr_err("Failed to create server socket: %d\n", err);
+        return err;
+    }
+
+    // Copy client_ip_arg to kernel buffer
+    
+    if (copy_from_user(kernel_client_ip, client_ip_arg, MAX_IP_LEN) != 0) {
+        pr_err("Failed to copy client IP address\n");
+        tcp_socket_exit();
+        return -EFAULT;
+    }
+
+    while (1) {
+        // 클라이언트의 연결 수락
+        err = kernel_accept(server_socket, &client_socket, 0);
+        if (err < 0) {
+            pr_err("Failed to accept client connection: %d\n", err);
+            break;
+        }
+        pr_info("Accepted client connection\n");
+
+        // 클라이언트의 IP 주소 확인
+        if (kernel_getpeername(client_socket, (struct sockaddr *)&addr) < 0) {
+            pr_err("Failed to get client IP address\n");
+            sock_release(client_socket);
+            continue; // 다음 클라이언트의 연결 시도를 기다립니다.
+        }
+
+        // 클라이언트의 IP 주소를 문자열로 변환
+        snprintf(client_ip, MAX_IP_LEN, "%pI4", &addr.sin_addr.s_addr);
+
+        // 클라이언트의 IP 주소가 client_ip_arg와 일치하는지 확인
+        if (strcmp(client_ip, kernel_client_ip) != 0) {
+            pr_err("Access denied for client IP: %s\n", client_ip);
+            sock_release(client_socket);
+            continue; // 다음 클라이언트의 연결 시도를 기다립니다.
+        }
+
+        while (1) {
+            int bytes_received = receive_message(client_socket, buffer, sizeof(buffer));
+            char kernel_message[MAX_MESSAGE_LEN];
+            if (bytes_received < 0) {
+                pr_err("Failed to receive message(server_init): %d\n", bytes_received);
+                break;
+            }
+
+            if (copy_from_user(kernel_message, message, MAX_MESSAGE_LEN - 1) != 0) {
+                pr_err("Failed to copy user message\n");
+                break;
+            }
+            kernel_message[MAX_MESSAGE_LEN - 1] = '\0';  // 문자열 종료를 위해 널 문자 추가
+
+            pr_info("Received message: %s\n", kernel_message);
+            bytes_sent = send_message(client_socket, kernel_message, strlen(kernel_message));
+
+            if (strncmp(buffer, "FILE:", 5) == 0) {
+                memset(filename, 0, MAX_FILENAME_LEN);
+                strncpy(filename, buffer + 5, MAX_FILENAME_LEN - 1);
+
+                bytes_sent = send_file(client_socket, filename);
+
+                if (bytes_sent < 0) {
+                    pr_err("Failed to send file: %.*s\n", MAX_FILENAME_LEN, filename);
+                    break;
+                }
+
+                pr_info("File sent: %s, Bytes sent: %d\n", filename, bytes_sent);
+                is_file_request = true;
+            } else {
+                // 일반 메시지 전송
+                if (is_file_request) {
+                    // 파일 전송 후 첫 메시지인 경우에만 "Hello, client!" 메시지를 전송
+                    char greeting_message[30] = "Hello, client!";
+                    bytes_sent = send_message(client_socket, greeting_message, strlen(greeting_message));
+
+                    if (bytes_sent < 0) {
+                        pr_err("Failed to send greeting message: %d\n", bytes_sent);
+                        break;
+                    }
+                    is_file_request = false;
+                } else {
+
+                    if (bytes_sent < 0) {
+                        pr_err("Failed to send message: %d\n", bytes_sent);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 클라이언트 소켓 해제
+        if (client_socket) {
+            sock_release(client_socket);
+            client_socket = NULL;
+        }
+    }
+
+    tcp_socket_exit();
+
+    return 0;
+}
+
+```
 
 SYSCALL\_DEFINE2(server, const char \_\_user \*, message, const char \_\_user \*, client\_ip\_arg)  함수는  서버  역할을  수행하는  시스템  호출  함수이다.  클라이언트의  연 결을  수락하고,  메시지를  주고받으며,  파일을  전송하는  서버  역할을  수행한다. 
 
